@@ -1,6 +1,8 @@
 """Sérialiseurs pour l'app accounts."""
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password as django_validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 
@@ -31,6 +33,15 @@ class SignupSerializer(serializers.ModelSerializer):
             "first_name": {"required": False},
             "last_name":  {"required": False},
         }
+
+    def validate_password(self, value: str) -> str:
+        """Applique les AUTH_PASSWORD_VALIDATORS de Django (longueur, robustesse,
+        similarité avec les autres champs, mots de passe trop communs…)."""
+        try:
+            django_validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
 
     def create(self, validated_data: dict) -> User:
         password = validated_data.pop("password")
