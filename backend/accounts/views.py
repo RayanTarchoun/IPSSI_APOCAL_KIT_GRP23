@@ -45,6 +45,7 @@ class SignupView(APIView):
     """Inscription par email. Envoie l'email de validation (best-effort)."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []  # endpoint public : pas de CSRF via session (cf. LoginView)
 
     @extend_schema(request=SignupSerializer, responses={201: UserSerializer})
     def post(self, request):
@@ -75,6 +76,12 @@ class LoginView(APIView):
     """Connexion par email + mot de passe. Renvoie un token DRF + crée la session."""
 
     permission_classes = [AllowAny]
+    # Endpoint PUBLIC (pré-auth) : on désactive l'authentification de requête.
+    # Sinon DRF SessionAuthentication, dès qu'un cookie `sessionid` résiduel est
+    # présent (posé par django_login au login précédent), impose un contrôle CSRF
+    # et rejette l'appel : « CSRF Failed: CSRF token missing ». Le frontend
+    # s'authentifie par token, pas par session — il n'envoie pas de jeton CSRF.
+    authentication_classes = []
 
     @extend_schema(
         request=LoginSerializer, responses={200: OpenApiResponse(description="{ token, user }")}
@@ -115,6 +122,7 @@ class VerifyEmailView(APIView):
     """Confirme l'adresse email à partir du token reçu par email."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []  # endpoint public : pas de CSRF via session (cf. LoginView)
 
     @extend_schema(
         request=EmailVerifySerializer,
@@ -163,6 +171,7 @@ class PasswordResetRequestView(APIView):
     """Demande de réinitialisation : envoie un email avec un lien (si le compte existe)."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []  # endpoint public : pas de CSRF via session (cf. LoginView)
 
     @extend_schema(
         request=PasswordResetRequestSerializer,
@@ -194,6 +203,7 @@ class PasswordResetConfirmView(APIView):
     """Définit le nouveau mot de passe à partir du lien (uid + token)."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []  # endpoint public : pas de CSRF via session (cf. LoginView)
 
     @extend_schema(
         request=PasswordResetConfirmSerializer,
