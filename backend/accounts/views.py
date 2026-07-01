@@ -280,6 +280,76 @@ class ProfileView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class DataExportView(APIView):
+    """Export RGPD des données personnelles de l'utilisateur connecté (Art. 15).
+
+    GET /api/accounts/me/export/?fmt=json|csv
+
+    Renvoie un fichier TÉLÉCHARGEABLE (JSON complet ou CSV tabulaire) contenant
+    les 6 catégories de données de l'utilisateur, et journalise la demande dans
+    un `DataRequest` (audit trail SAR) avec l'empreinte SHA-256 du fichier remis.
+
+    Note : le paramètre s'appelle `fmt` (et non `format`, réservé par DRF pour
+    sa négociation de contenu).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(description="Fichier d'export (application/json ou text/csv)")
+        },
+        description="Export RGPD (droit d'accès, Art. 15) des données de l'utilisateur connecté.",
+    )
+    def get(self, request):
+        from django.http import HttpResponse
+        from django.utils import timezone
+
+        from .export import (
+            build_user_export,
+            export_to_csv_bytes,
+            export_to_json_bytes,
+            sha256_hex,
+        )
+        from .models import DataRequest
+
+        fmt = (request.query_params.get("fmt") or "json").lower()
+        if fmt not in ("json", "csv"):
+            return Response(
+                {"detail": "Format non supporté. Utilisez ?fmt=json ou ?fmt=csv."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Filtrage systématique par request.user dans build_user_export.
+        data = build_user_export(request.user)
+
+        if fmt == "csv":
+            payload = export_to_csv_bytes(data)
+            content_type = "text/csv; charset=utf-8"
+        else:
+            payload = export_to_json_bytes(data)
+            content_type = "application/json"
+
+        digest = sha256_hex(payload)
+        filename = f"export-donnees-user-{request.user.id}.{fmt}"
+
+        # Audit trail : on trace la demande d'accès et sa réponse (CA-J3B-6).
+        DataRequest.objects.create(
+            user=request.user,
+            request_type=DataRequest.TYPE_ACCESS,
+            status=DataRequest.STATUS_ANSWERED,
+            export_format=fmt,
+            file_sha256=digest,
+            answered_at=timezone.now(),
+        )
+
+        response = HttpResponse(payload, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        # Empreinte exposée pour vérification d'intégrité côté demandeur.
+        response["X-Export-SHA256"] = digest
+        return response
+
+
 class ChangePasswordView(APIView):
     """Changement de mot de passe (en étant connecté, avec l'ancien mot de passe)."""
 
