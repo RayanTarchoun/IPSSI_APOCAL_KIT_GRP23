@@ -43,6 +43,12 @@ RUN pip install --no-index --find-links=/wheels -r requirements.txt \
 # Code applicatif
 COPY . .
 
+# Durcissement (audit J3, OWASP A04) : ne pas tourner en root. On crée un
+# utilisateur applicatif non privilégié et on lui donne la propriété de /app.
+RUN useradd --create-home --uid 1000 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 # Commande par défaut (surchargée par docker-compose.prod.yml qui ajoute
