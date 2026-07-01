@@ -17,7 +17,7 @@ import requests
 from django.conf import settings
 
 from .base import LLMClient, LLMError
-from .quiz_prompt import SYSTEM_PROMPT, build_user_prompt, parse_and_validate_quiz
+from .quiz_prompt import SYSTEM_PROMPT, build_user_prompt, generate_quiz_resilient
 
 
 class OpenAICompatibleClient(LLMClient):
@@ -49,18 +49,18 @@ class OpenAICompatibleClient(LLMClient):
             )
 
     def generate_quiz(self, source_text: str, title: str) -> list[dict]:
-        raw = self._call(source_text, title)
-        return parse_and_validate_quiz(raw)
+        # Re-prompt automatique si la validation échoue (J3, couche 4).
+        return generate_quiz_resilient(lambda strict: self._call(source_text, title, strict))
 
     # ----- internals -----
 
-    def _call(self, source_text: str, title: str) -> str:
+    def _call(self, source_text: str, title: str, strict: bool = False) -> str:
         payload = {
             "model": self.model,
             # Séparation system / user (défense de base contre l'injection, cf. J3).
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(source_text, title)},
+                {"role": "user", "content": build_user_prompt(source_text, title, strict)},
             ],
             "temperature": 0.4,
         }

@@ -12,7 +12,7 @@ import requests
 from django.conf import settings
 
 from .base import LLMClient, LLMError
-from .quiz_prompt import build_full_prompt, parse_and_validate_quiz
+from .quiz_prompt import build_full_prompt, generate_quiz_resilient
 
 
 class OllamaLLMClient(LLMClient):
@@ -30,10 +30,13 @@ class OllamaLLMClient(LLMClient):
 
     def generate_quiz(self, source_text: str, title: str) -> list[dict]:
         # Ollama /api/generate attend UN prompt unique (pas de séparation
-        # system/user) : on concatène donc system + cours via build_full_prompt.
-        prompt = build_full_prompt(source_text, title)
-        raw = self._call_ollama(prompt)
-        return parse_and_validate_quiz(raw)
+        # system/user native) : la séparation est assurée par des DÉLIMITEURS
+        # explicites autour du cours (build_full_prompt) + l'instruction
+        # défensive du system prompt (J3, couche 1). Re-prompt auto si la
+        # validation échoue (couche 4).
+        return generate_quiz_resilient(
+            lambda strict: self._call_ollama(build_full_prompt(source_text, title, strict))
+        )
 
     # ----- internals -----
 
